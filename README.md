@@ -50,9 +50,13 @@ L'application se lance automatiquement en plein écran.
 
 **Barre d'outils (en haut) :**
 - 📁 **Charger Image** : Charge une image de fond (.png, .jpg, .jpeg, .bmp, .gif)
+- 🔄 **Reload** : Recharge l'image originale et efface tous les dessins
 - 🎨 **Couleur** : Ouvre une palette pour choisir la couleur du spray
-- **Slider Taille** : Ajuste la taille du spray (5-100 pixels)
-- 🔊 **Charger Son** : Charge un fichier audio de spray (.wav, .mp3, .ogg)
+- 🧹 **Gomme** : Active/désactive le mode gomme (efface uniquement la peinture, pas l'image de fond)
+- **Slider Taille** : Ajuste la taille du spray/gomme (5-100 pixels)
+- **Slider Opacité** : Ajuste l'opacité de la peinture (10-100%)
+- 🔊 **Son** : Charge un fichier audio de spray (.wav, .mp3, .ogg)
+- ↶ **Annuler** : Annule la dernière action (jusqu'à 50 actions)
 - 🗑️ **Effacer** : Efface tout le dessin (avec confirmation)
 - 💾 **Sauvegarder** : Sauvegarde votre création
 - ❌ **Quitter** : Ferme l'application
@@ -60,10 +64,25 @@ L'application se lance automatiquement en plein écran.
 ### Dessin
 
 1. **Choisissez votre couleur** avec le bouton "Couleur"
-2. **Ajustez la taille** du spray avec le slider
-3. **Cliquez et maintenez** avec le stylo Epson (ou la souris) pour dessiner
-4. Le son joue automatiquement quand vous dessinez (si chargé)
-5. Le son s'arrête quand vous relâchez
+2. **Ajustez la taille** du spray avec le slider "Taille"
+3. **Ajustez l'opacité** avec le slider "Opacité" (100% = opaque, 10% = transparent)
+4. **Une cible apparaît** autour de votre curseur pour prévisualiser la taille et le mode
+   - **Mode peinture** : Cercle avec la couleur sélectionnée + cercle central montrant l'opacité
+   - **Mode gomme** : Cercle rouge pointillé avec une croix
+5. **Cliquez et maintenez** avec le stylo Epson (ou la souris) pour dessiner
+6. Le son joue automatiquement quand vous dessinez (si chargé)
+7. Le son s'arrête quand vous relâchez
+
+### Mode Gomme
+
+1. **Cliquez sur "Gomme"** pour activer le mode gomme (le bouton devient enfoncé)
+2. La gomme efface **uniquement la peinture**, pas l'image de fond
+3. **Recliquez sur "Gomme"** pour revenir au mode peinture
+
+### Annuler / Reload
+
+- **Annuler** : Annule le dernier coup de spray/gomme (historique de 50 actions)
+- **Reload** : Repart de l'image originale, efface tous les dessins
 
 ### Raccourcis clavier
 - **Échap** : Quitter/entrer en mode plein écran
@@ -95,7 +114,12 @@ Le projecteur doit être en mode "Interactive" pour que le stylo fonctionne corr
 
 ✅ Interface plein écran optimisée pour projection
 ✅ Effet spray réaliste avec particules dispersées
-✅ Opacité variable pour un rendu naturel
+✅ Cible de prévisualisation dynamique (affiche la taille et le mode)
+✅ Opacité/transparence ajustable (10-100%)
+✅ Superposition de couleurs avec transparence réelle
+✅ Mode gomme intelligent (efface uniquement la peinture)
+✅ Historique d'annulation (jusqu'à 50 actions)
+✅ Bouton Reload pour repartir de l'image originale
 ✅ Chargement d'images de fond
 ✅ Sélection de couleurs illimitée
 ✅ Taille de spray ajustable (5-100px)
@@ -135,8 +159,10 @@ Le projecteur doit être en mode "Interactive" pour que le stylo fonctionne corr
 
 - Commencez avec une grande taille pour les fonds
 - Utilisez une petite taille pour les détails
-- Superposez les couleurs pour créer des dégradés
+- **Jouez avec l'opacité** : Réglez à 30-50% pour créer des effets de superposition et dégradés
+- **Superposez les couleurs** : Peignez une couleur, puis une autre avec faible opacité par-dessus
 - Chargez une photo de mur pour plus de réalisme
+- La cible vous montre exactement ce qui va être dessiné
 
 ## 📄 Licence
 

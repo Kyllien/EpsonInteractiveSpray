@@ -1,14 +1,13 @@
 import sys
+import os
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                              QHBoxLayout, QPushButton, QLabel, QFileDialog,
                              QMessageBox, QCheckBox, QDialog, QGridLayout)
 from PyQt5.QtCore import Qt, QPoint, QTimer
-from PyQt5.QtGui import (QPainter, QColor, QPen, QImage, QPixmap, QPainterPath,
-                         QLinearGradient, QRadialGradient, QBrush, QCursor)
+from PyQt5.QtGui import QPainter, QColor, QPen, QImage
 from PIL import Image, ImageEnhance, ImageDraw
 import random
 import pygame
-import numpy as np
 
 
 class SaveDialog(QDialog):
@@ -18,7 +17,7 @@ class SaveDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Options de sauvegarde")
         self.setModal(True)
-        self.setFixedSize(400, 250)
+        self.setFixedSize(400, 280)
 
         # Style du dialogue
         self.setStyleSheet("""
@@ -66,17 +65,23 @@ class SaveDialog(QDialog):
 
         layout = QVBoxLayout()
 
-        title = QLabel("Options de sauvegarde")
+        title = QLabel("Que souhaitez-vous sauvegarder ?")
         title.setAlignment(Qt.AlignCenter)
         title.setStyleSheet("font-size: 16px; margin: 10px;")
         layout.addWidget(title)
 
+        # Options de sauvegarde
+        self.include_drawing = QCheckBox("Inclure le dessin")
+        self.include_drawing.setChecked(True)
+        self.include_drawing.setEnabled(False)  # Toujours activé
+        layout.addWidget(self.include_drawing)
+
         self.include_background = QCheckBox("Inclure l'image de fond")
-        self.include_background.setChecked(True)
+        self.include_background.setChecked(False)
         layout.addWidget(self.include_background)
 
         self.include_template = QCheckBox("Inclure l'image modèle")
-        self.include_template.setChecked(True)
+        self.include_template.setChecked(False)
         layout.addWidget(self.include_template)
 
         # Boutons
@@ -120,11 +125,16 @@ class DrawingCanvas(QWidget):
         try:
             self.image = QImage(1920, 1080, QImage.Format_ARGB32)
             self.image.fill(Qt.white)
+            # Initialiser la couche de dessin du parent
+            if self.parent:
+                self.parent.drawing_layer = Image.new('RGBA', (1920, 1080), (0, 0, 0, 0))
         except Exception as e:
             print(f"Erreur lors de la création de l'image: {e}")
             # Fallback avec une taille plus petite
             self.image = QImage(800, 600, QImage.Format_ARGB32)
             self.image.fill(Qt.white)
+            if self.parent:
+                self.parent.drawing_layer = Image.new('RGBA', (800, 600), (0, 0, 0, 0))
 
     def paintEvent(self, event):
         """Dessiner le canvas"""
@@ -206,6 +216,9 @@ class SprayPaintApp(QMainWindow):
         self.background_image = None
         self.template_image = None
         self.template_position = (725, 540)
+
+        # Couche de dessin séparée (pour isoler le dessin du fond/modèle)
+        self.drawing_layer = None
 
         # Audio
         self.spray_sound = None
@@ -733,19 +746,39 @@ class SprayPaintApp(QMainWindow):
             screens = app.screens()
             print(f"Nombre d'écrans détectés: {len(screens)}")
 
-            # Définir une taille fixe pour démarrer
-            self.setGeometry(100, 100, 1600, 900)
-            print(f"Géométrie définie: {self.geometry()}")
-
-            # Si plusieurs écrans, utiliser le second
+            # Si plusieurs écrans, utiliser le second (écran HDMI)
             if len(screens) > 1:
-                print("Plusieurs écrans détectés, utilisation du second")
+                print("Plusieurs écrans détectés, utilisation de l'écran secondaire")
                 screen = screens[1]
-                self.setGeometry(screen.geometry())
 
-            # Plein écran (commenté pour le débogage)
-            # self.showFullScreen()
-            # self.setWindowFlag(Qt.FramelessWindowHint)
+                # Obtenir la géométrie de l'écran secondaire
+                screen_geometry = screen.geometry()
+                print(f"Géométrie écran secondaire: {screen_geometry}")
+
+                # Positionner la fenêtre sur l'écran secondaire
+                self.move(screen_geometry.x(), screen_geometry.y())
+
+                # Définir la taille en plein écran
+                self.resize(screen_geometry.width(), screen_geometry.height())
+
+                # Activer le plein écran sans bordures
+                self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
+                self.showFullScreen()
+
+                print(f"Application en plein écran sur écran 2: {screen_geometry.width()}x{screen_geometry.height()}")
+                print("RAPPEL: Appuyez sur ESC pour quitter l'application")
+            else:
+                print("Un seul écran détecté, utilisation de l'écran principal")
+                screen = screens[0]
+                screen_geometry = screen.geometry()
+
+                # Plein écran sur l'écran principal
+                self.setWindowFlags(Qt.FramelessWindowHint)
+                self.showFullScreen()
+
+                print(
+                    f"Application en plein écran sur écran principal: {screen_geometry.width()}x{screen_geometry.height()}")
+                print("RAPPEL: Appuyez sur ESC pour quitter l'application")
 
             print("Configuration de l'écran terminée")
         except Exception as e:
@@ -755,10 +788,29 @@ class SprayPaintApp(QMainWindow):
 
     def load_background(self):
         """Charger une image de fond"""
+        # Créer le dossier /fonds s'il n'existe pas
+        fonds_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fonds")
+        os.makedirs(fonds_dir, exist_ok=True)
+
+        # Désactiver les sons Windows temporairement
+        try:
+            import ctypes
+            # SPI_SETBEEP = 0x0002, False = désactiver
+            ctypes.windll.user32.SystemParametersInfoW(0x0002, 0, 0, 0)
+        except:
+            pass
+
         file_path, _ = QFileDialog.getOpenFileName(
             self, "Choisir une image de fond",
-            "", "Images (*.png *.jpg *.jpeg *.bmp)"
+            fonds_dir, "Images (*.png *.jpg *.jpeg *.bmp)"
         )
+
+        # Réactiver les sons Windows
+        try:
+            import ctypes
+            ctypes.windll.user32.SystemParametersInfoW(0x0002, 1, 0, 0)
+        except:
+            pass
 
         if file_path:
             try:
@@ -766,16 +818,32 @@ class SprayPaintApp(QMainWindow):
                 img = img.resize((1920, 1080), Image.Resampling.LANCZOS)
                 self.background_image = img
                 self.reload_background_layers()
-                self.show_message("Succès", "Image de fond chargée !")
+                # Pas de message de succès pour éviter le bruit Windows
             except Exception as e:
                 self.show_message("Erreur", f"Impossible de charger l'image:\n{e}", QMessageBox.Critical)
 
     def load_template(self):
         """Charger une image modèle"""
+        # Créer le dossier /modeles s'il n'existe pas
+        modeles_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "modeles")
+        os.makedirs(modeles_dir, exist_ok=True)
+
+        try:
+            import ctypes
+            ctypes.windll.user32.SystemParametersInfoW(0x0002, 0, 0, 0)
+        except:
+            pass
+
         file_path, _ = QFileDialog.getOpenFileName(
             self, "Choisir une image modèle",
-            "", "Images (*.png *.jpg *.jpeg *.bmp)"
+            modeles_dir, "Images (*.png *.jpg *.jpeg *.bmp)"
         )
+
+        try:
+            import ctypes
+            ctypes.windll.user32.SystemParametersInfoW(0x0002, 1, 0, 0)
+        except:
+            pass
 
         if file_path:
             try:
@@ -789,12 +857,13 @@ class SprayPaintApp(QMainWindow):
 
                 self.template_image = img
                 self.reload_background_layers()
-                self.show_message("Succès", "Image modèle chargée (opacité 30%) !")
+                # Pas de message de succès pour éviter le bruit Windows
             except Exception as e:
                 self.show_message("Erreur", f"Impossible de charger l'image modèle:\n{e}", QMessageBox.Critical)
 
     def reload_background_layers(self):
-        """Recharger toutes les couches"""
+        """Recharger toutes les couches en préservant le dessin"""
+        # Créer la couche de fond (blanc + fond + modèle)
         base = Image.new('RGBA', (1920, 1080), (255, 255, 255, 255))
 
         if self.background_image:
@@ -804,6 +873,10 @@ class SprayPaintApp(QMainWindow):
             x = self.template_position[0] - 500
             y = self.template_position[1] - 500
             base.paste(self.template_image, (x, y), self.template_image)
+
+        # Ajouter le dessin par-dessus si il existe
+        if self.drawing_layer is not None:
+            base = Image.alpha_composite(base, self.drawing_layer)
 
         # Convertir en QImage
         img_data = base.tobytes("raw", "RGBA")
@@ -821,51 +894,89 @@ class SprayPaintApp(QMainWindow):
                               QMessageBox.Warning)
             return
 
+        # Créer le dossier /sons s'il n'existe pas
+        sons_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "sons")
+        os.makedirs(sons_dir, exist_ok=True)
+
+        try:
+            import ctypes
+            ctypes.windll.user32.SystemParametersInfoW(0x0002, 0, 0, 0)
+        except:
+            pass
+
         file_path, _ = QFileDialog.getOpenFileName(
             self, "Choisir un son de spray",
-            "", "Audio (*.wav *.mp3 *.ogg)"
+            sons_dir, "Audio (*.wav *.mp3 *.ogg)"
         )
+
+        try:
+            import ctypes
+            ctypes.windll.user32.SystemParametersInfoW(0x0002, 1, 0, 0)
+        except:
+            pass
 
         if file_path:
             try:
                 self.spray_sound = pygame.mixer.Sound(file_path)
-                self.show_message("Succès", "Son chargé avec succès !")
+                # Pas de message de succès pour éviter le bruit Windows
             except Exception as e:
                 self.show_message("Erreur", f"Impossible de charger le son:\n{e}", QMessageBox.Critical)
 
     def save_image(self):
-        """Sauvegarder l'image"""
+        """Sauvegarder l'image avec options sélectives"""
         dialog = SaveDialog(self)
         if dialog.exec_() == QDialog.Accepted:
-            # Créer l'image finale
+            # Créer le dossier /save s'il n'existe pas
+            save_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "save")
+            os.makedirs(save_dir, exist_ok=True)
+
+            # Récupérer les options
+            include_bg = dialog.include_background.isChecked()
+            include_tpl = dialog.include_template.isChecked()
+
+            # Composer l'image finale selon les options
             final_image = Image.new('RGBA', (1920, 1080), (255, 255, 255, 255))
 
-            if dialog.include_background.isChecked() and self.background_image:
+            # Ajouter le fond si demandé
+            if include_bg and self.background_image:
                 final_image = Image.alpha_composite(final_image, self.background_image)
 
-            if dialog.include_template.isChecked() and self.template_image:
-                x = self.template_position[0] - 500
-                y = self.template_position[1] - 500
-                final_image.paste(self.template_image, (x, y), self.template_image)
+            # Ajouter le modèle si demandé
+            if include_tpl and self.template_image:
+                tx = self.template_position[0] - 500
+                ty = self.template_position[1] - 500
+                final_image.paste(self.template_image, (tx, ty), self.template_image)
 
-            # Convertir QImage en PIL Image
-            ptr = self.canvas.image.bits()
-            ptr.setsize(1920 * 1080 * 4)
-            arr = np.frombuffer(ptr, np.uint8).reshape((1080, 1920, 4))
-            current_pil = Image.fromarray(arr, 'RGBA')
+            # Toujours ajouter le dessin (qui est déjà isolé dans drawing_layer)
+            if self.drawing_layer:
+                final_image = Image.alpha_composite(final_image, self.drawing_layer)
 
-            final_image = Image.alpha_composite(final_image, current_pil)
+            # Convertir en RGB pour la sauvegarde
             final_image = final_image.convert('RGB')
+
+            # Désactiver les sons Windows
+            try:
+                import ctypes
+                ctypes.windll.user32.SystemParametersInfoW(0x0002, 0, 0, 0)
+            except:
+                pass
 
             file_path, _ = QFileDialog.getSaveFileName(
                 self, "Sauvegarder l'image",
-                "", "PNG (*.png);;JPEG (*.jpg)"
+                save_dir, "PNG (*.png);;JPEG (*.jpg)"
             )
+
+            # Réactiver les sons Windows
+            try:
+                import ctypes
+                ctypes.windll.user32.SystemParametersInfoW(0x0002, 1, 0, 0)
+            except:
+                pass
 
             if file_path:
                 try:
                     final_image.save(file_path)
-                    self.show_message("Succès", f"Image sauvegardée :\n{file_path}")
+                    # Pas de message de succès pour éviter le bruit Windows
                 except Exception as e:
                     self.show_message("Erreur", f"Impossible de sauvegarder:\n{e}", QMessageBox.Critical)
 
@@ -913,6 +1024,8 @@ class SprayPaintApp(QMainWindow):
         """Recommencer"""
         if self.show_question("Confirmation",
                               "Recommencer le dessin en gardant le fond et le modèle ?"):
+            # Réinitialiser uniquement la couche de dessin
+            self.drawing_layer = Image.new('RGBA', (1920, 1080), (0, 0, 0, 0))
             self.reload_background_layers()
 
     def decrease_size(self):
@@ -980,58 +1093,86 @@ class SprayPaintApp(QMainWindow):
 
         self.last_valid_position = pos
 
-        # Convertir QImage en PIL
-        ptr = self.canvas.image.bits()
-        ptr.setsize(1920 * 1080 * 4)
-        arr = np.frombuffer(ptr, np.uint8).reshape((1080, 1920, 4))
-        pil_image = Image.fromarray(arr, 'RGBA')
-
         x, y = pos.x(), pos.y()
 
         if self.eraser_mode:
-            # Gomme: restaurer le fond
-            base = Image.new('RGBA', (1920, 1080), (255, 255, 255, 255))
-
-            if self.background_image:
-                base = Image.alpha_composite(base, self.background_image)
-
-            if self.template_image:
-                tx = self.template_position[0] - 500
-                ty = self.template_position[1] - 500
-                base.paste(self.template_image, (tx, ty), self.template_image)
-
-            # Effacer en cercle
-            draw = ImageDraw.Draw(pil_image)
+            # Gomme: effacer sur la couche de dessin
             mask = Image.new('L', (1920, 1080), 0)
             mask_draw = ImageDraw.Draw(mask)
             mask_draw.ellipse([x - self.spray_size, y - self.spray_size,
                                x + self.spray_size, y + self.spray_size], fill=255)
 
-            pil_image = Image.composite(base, pil_image, mask)
+            # Créer une image transparente
+            transparent = Image.new('RGBA', (1920, 1080), (0, 0, 0, 0))
+
+            # Appliquer le masque pour effacer la zone sur la couche de dessin
+            self.drawing_layer = Image.composite(transparent, self.drawing_layer, mask)
         else:
-            # Spray réaliste
+            # Spray réaliste ultra amélioré
             spray_layer = Image.new('RGBA', (1920, 1080), (0, 0, 0, 0))
             spray_draw = ImageDraw.Draw(spray_layer)
 
             rgb_color = tuple(int(self.spray_color.lstrip('#')[i:i + 2], 16) for i in (0, 2, 4))
-            num_particles = int(self.spray_size * 3)
+
+            # Nombre de particules ajusté pour éviter un centre trop dense
+            num_particles = int(self.spray_size * 6)
 
             for _ in range(num_particles):
-                offset_x = int(random.gauss(0, self.spray_size / 2.5))
-                offset_y = int(random.gauss(0, self.spray_size / 2.5))
+                # Distribution ajustée :
+                # 50% des particules au centre (au lieu de 60%)
+                # 35% des particules en zone intermédiaire (au lieu de 30%)
+                # 15% des particules très éloignées (au lieu de 10%)
+                rand = random.random()
+
+                if rand < 0.5:
+                    # Zone centrale - distribution légèrement plus large
+                    offset_x = int(random.gauss(0, self.spray_size / 3.5))
+                    offset_y = int(random.gauss(0, self.spray_size / 3.5))
+                elif rand < 0.85:
+                    # Zone intermédiaire
+                    offset_x = int(random.gauss(0, self.spray_size / 1.8))
+                    offset_y = int(random.gauss(0, self.spray_size / 1.8))
+                else:
+                    # Particules très éloignées (projections)
+                    offset_x = int(random.gauss(0, self.spray_size * 1.5))
+                    offset_y = int(random.gauss(0, self.spray_size * 1.5))
 
                 distance = (offset_x ** 2 + offset_y ** 2) ** 0.5
 
-                if distance <= self.spray_size:
+                # Limite plus souple pour permettre aux particules d'aller plus loin
+                if distance <= self.spray_size * 2:
                     px = x + offset_x
                     py = y + offset_y
 
-                    particle_size = random.choice([1, 1, 1, 2])
+                    # Tailles de particules très variées
+                    particle_rand = random.random()
+                    if particle_rand < 0.75:
+                        # 75% de très petites particules (1 pixel)
+                        particle_size = 0.5
+                    elif particle_rand < 0.92:
+                        # 17% de petites particules (2 pixels)
+                        particle_size = 1
+                    else:
+                        # 8% de particules moyennes (3-4 pixels)
+                        particle_size = random.uniform(1.5, 2.5)
 
-                    distance_factor = 1 - (distance / self.spray_size)
-                    distance_opacity = int(255 * distance_factor ** 2)
-                    final_opacity = int(distance_opacity * (self.spray_opacity / 100.0))
-                    final_opacity = int(final_opacity * random.uniform(0.3, 1.0))
+                    # Opacité basée sur la distance avec courbe plus douce
+                    if distance < self.spray_size * 0.3:
+                        # Centre - opacité réduite pour moins de densité
+                        base_opacity = random.uniform(0.6, 0.9)
+                    elif distance < self.spray_size:
+                        # Zone intermédiaire
+                        distance_factor = 1 - (distance / self.spray_size)
+                        base_opacity = distance_factor ** 1.5 * random.uniform(0.4, 0.9)
+                    else:
+                        # Zone éloignée, très transparent
+                        distance_factor = 1 - (distance / (self.spray_size * 2))
+                        base_opacity = distance_factor ** 3 * random.uniform(0.1, 0.4)
+
+                    final_opacity = int(255 * base_opacity * (self.spray_opacity / 100.0))
+
+                    # Limiter l'opacité pour éviter les pixels complètement opaques
+                    final_opacity = min(final_opacity, 200)
 
                     color_with_opacity = rgb_color + (final_opacity,)
 
@@ -1042,10 +1183,25 @@ class SprayPaintApp(QMainWindow):
                             fill=color_with_opacity
                         )
 
-            pil_image = Image.alpha_composite(pil_image, spray_layer)
+            # Ajouter le spray à la couche de dessin
+            self.drawing_layer = Image.alpha_composite(self.drawing_layer, spray_layer)
+
+        # Recomposer l'image complète : fond + modèle + dessin
+        final_image = Image.new('RGBA', (1920, 1080), (255, 255, 255, 255))
+
+        if self.background_image:
+            final_image = Image.alpha_composite(final_image, self.background_image)
+
+        if self.template_image:
+            tx = self.template_position[0] - 500
+            ty = self.template_position[1] - 500
+            final_image.paste(self.template_image, (tx, ty), self.template_image)
+
+        # Ajouter le dessin par-dessus
+        final_image = Image.alpha_composite(final_image, self.drawing_layer)
 
         # Reconvertir en QImage
-        img_data = pil_image.tobytes("raw", "RGBA")
+        img_data = final_image.tobytes("raw", "RGBA")
         self.canvas.image = QImage(img_data, 1920, 1080, QImage.Format_RGBA8888).copy()
         self.canvas.update()
 

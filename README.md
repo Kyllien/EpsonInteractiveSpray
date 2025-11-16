@@ -1,175 +1,111 @@
-# 🎨 Epson Spray Paint - Application de Graffiti Virtuel
+# Epson Spray Paint - Graffiti Virtuel
 
-Application Python pour transformer votre stylo interactif Epson Easy Interactive Pen en bombe de peinture virtuelle sur votre projecteur Epson EB-475Wi.
+Application de peinture spray virtuelle pour projecteur Epson avec stylo interactif.
 
-## 📋 Prérequis
+## Installation
 
-### 1. Python
-- Python 3.7 ou supérieur
-
-### 2. Pilotes Epson
-**IMPORTANT** : Vous devez installer les pilotes Epson Easy Interactive Driver pour que le stylo soit reconnu par Windows.
-
-Téléchargement : [Site officiel Epson](https://epson.com)
-- Recherchez "Epson EB-475Wi drivers"
-- Téléchargez et installez "Easy Interactive Driver"
-
-### 3. Bibliothèques Python
-Installez les bibliothèques nécessaires avec pip :
+### Dépendances requises
 
 ```bash
-pip install pillow pygame
+pip install -r requirements.txt
 ```
 
-**Détail des bibliothèques :**
-- `Pillow` : Pour la manipulation d'images
-- `pygame` : Pour la lecture audio
-- `tkinter` : Inclus avec Python (interface graphique)
+### Lancement
 
-## 🚀 Installation
-
-1. **Téléchargez le fichier** `spray_paint_app.py`
-
-2. **Installez les dépendances** :
-```bash
-pip install pillow pygame
-```
-
-3. **Installez les pilotes Epson** (si ce n'est pas déjà fait)
-
-## 💻 Utilisation
-
-### Lancement de l'application
 ```bash
 python spray_paint_app.py
 ```
 
-L'application se lance automatiquement en plein écran.
+## Fonctionnalités
 
 ### Interface
 
-**Barre d'outils (en haut) :**
-- 📁 **Charger Image** : Charge une image de fond (.png, .jpg, .jpeg, .bmp, .gif)
-- 🔄 **Reload** : Recharge l'image originale et efface tous les dessins
-- 🎨 **Couleur** : Ouvre une palette pour choisir la couleur du spray
-- 🧹 **Gomme** : Active/désactive le mode gomme (efface uniquement la peinture, pas l'image de fond)
-- **Slider Taille** : Ajuste la taille du spray/gomme (5-100 pixels)
-- **Slider Opacité** : Ajuste l'opacité de la peinture (10-100%)
-- 🔊 **Son** : Charge un fichier audio de spray (.wav, .mp3, .ogg)
-- ↶ **Annuler** : Annule la dernière action (jusqu'à 50 actions)
-- 🗑️ **Effacer** : Efface tout le dessin (avec confirmation)
-- 💾 **Sauvegarder** : Sauvegarde votre création
-- ❌ **Quitter** : Ferme l'application
+L'application dispose de deux barres d'outils :
 
-### Dessin
+#### Barre supérieure (en haut à droite)
+- 📁 **Charger fond** : Charge une image de fond plein écran
+- 🖼️ **Charger modèle** : Charge une image modèle 1000x1000px à 30% d'opacité (centrée en x=725, y=540)
+- 🔊 **Charger son** : Charge un fichier audio pour le son du spray
+- 💾 **Sauvegarder** : Sauvegarde l'image avec options (fond/modèle)
 
-1. **Choisissez votre couleur** avec le bouton "Couleur"
-2. **Ajustez la taille** du spray avec le slider "Taille"
-3. **Ajustez l'opacité** avec le slider "Opacité" (100% = opaque, 10% = transparent)
-4. **Une cible apparaît** autour de votre curseur pour prévisualiser la taille et le mode
-   - **Mode peinture** : Cercle avec la couleur sélectionnée + cercle central montrant l'opacité
-   - **Mode gomme** : Cercle rouge pointillé avec une croix
-5. **Cliquez et maintenez** avec le stylo Epson (ou la souris) pour dessiner
-6. Le son joue automatiquement quand vous dessinez (si chargé)
-7. Le son s'arrête quand vous relâchez
+#### Barre latérale droite (à 20% de la hauteur)
 
-### Mode Gomme
+**Outils :**
+- ↶ **Annuler** : Annule la dernière action (max 50 actions)
+- 🧹 **Gomme** : Active/désactive le mode gomme (restaure le fond)
+- 🔄 **Recommencer** : Efface le dessin en gardant le fond et le modèle
 
-1. **Cliquez sur "Gomme"** pour activer le mode gomme (le bouton devient enfoncé)
-2. La gomme efface **uniquement la peinture**, pas l'image de fond
-3. **Recliquez sur "Gomme"** pour revenir au mode peinture
+**Taille du spray (6 paliers) :**
+- Bouton **−** : Diminue la taille
+- Bouton **+** : Augmente la taille
+- Paliers : 20px, 60px, 100px, 140px, 180px, 220px
 
-### Annuler / Reload
+**Opacité du spray (6 paliers) :**
+- ☀ **Blanc** : Diminue l'opacité
+- ☀ **Noir** : Augmente l'opacité  
+- Paliers : 50%, 60%, 70%, 80%, 90%, 100%
 
-- **Annuler** : Annule le dernier coup de spray/gomme (historique de 50 actions)
-- **Reload** : Repart de l'image originale, efface tous les dessins
+**Palette de couleurs :**
+- 16 couleurs disponibles en grille 4x4
 
-### Raccourcis clavier
-- **Échap** : Quitter/entrer en mode plein écran
+### Spray réaliste
 
-## 🎵 Fichiers audio
+Le spray utilise un algorithme de particules pour simuler un vrai spray paint :
+- Distribution en 3 zones (centre, intermédiaire, lointaine)
+- Particules de tailles variées (0.5px à 2.5px)
+- Opacité graduelle du centre vers l'extérieur
+- Effet de diffusion naturel
 
-Vous devez fournir vos propres fichiers audio de spray. Formats supportés :
-- `.wav` (recommandé pour la qualité)
-- `.mp3`
-- `.ogg`
+### Sauvegarde
 
-**Conseil** : Utilisez un son court (~1-2 secondes) qui sera lu en boucle pendant le dessin.
+Lors de la sauvegarde, vous pouvez choisir :
+- ✓ Inclure l'image de fond
+- ✓ Inclure l'image modèle
+- Sauvegarder uniquement le dessin
 
-## 🎯 Utilisation avec le projecteur Epson
+### Multi-écrans
 
-1. **Connectez votre PC au projecteur** Epson EB-475Wi
-2. **Configurez l'affichage** :
-   - Mode miroir (duplication) : l'interface sera visible sur le projecteur
-   - Mode étendu : déplacez l'application sur l'écran du projecteur
-3. **Calibrez le stylo** avec les pilotes Epson si nécessaire
-4. **Lancez l'application**
-5. Le stylo fonctionnera comme un outil de dessin tactile
+L'application détecte automatiquement les écrans :
+- **2+ écrans** : S'ouvre automatiquement sur l'écran secondaire (HDMI)
+- **1 écran** : S'ouvre sur l'écran principal
+- Mode plein écran automatique sans bordures
 
-## 🔧 Configuration du projecteur
+## Utilisation avec Epson Pen Interactive
 
-Le projecteur doit être en mode "Interactive" pour que le stylo fonctionne correctement. Consultez le manuel du EB-475Wi pour plus de détails.
+L'application est optimisée pour le stylo interactif Epson :
+- Son de spray pendant le dessin (pas avec la gomme)
+- Détection de position pour déclencher le son même si la position n'est pas détectée par le projecteur
 
-## ⚙️ Fonctionnalités
+## Raccourcis clavier
 
-✅ Interface plein écran optimisée pour projection
-✅ Effet spray réaliste avec particules dispersées
-✅ Cible de prévisualisation dynamique (affiche la taille et le mode)
-✅ Opacité/transparence ajustable (10-100%)
-✅ Superposition de couleurs avec transparence réelle
-✅ Mode gomme intelligent (efface uniquement la peinture)
-✅ Historique d'annulation (jusqu'à 50 actions)
-✅ Bouton Reload pour repartir de l'image originale
-✅ Chargement d'images de fond
-✅ Sélection de couleurs illimitée
-✅ Taille de spray ajustable (5-100px)
-✅ Son de spray personnalisable
-✅ Sauvegarde des créations en PNG/JPEG
-✅ Compatible avec le stylo Epson Easy Interactive Pen
+- **ESC** : Quitter l'application (avec confirmation)
 
-## 🐛 Dépannage
+## Spécifications techniques
 
-### Le stylo ne fonctionne pas
-- Vérifiez que les pilotes Easy Interactive Driver sont installés
-- Calibrez le stylo via le logiciel Epson
-- Vérifiez que le projecteur est en mode interactif
+- Résolution : 1920 x 1080 pixels
+- Format d'image de fond : PNG, JPG, JPEG, BMP
+- Format d'image modèle : PNG, JPG, JPEG, BMP (redimensionné à 1000x1000px)
+- Format audio : WAV, MP3, OGG
+- Format de sauvegarde : PNG, JPG
 
-### Pas de son
-- Vérifiez que vous avez chargé un fichier audio
-- Testez avec un fichier .wav
-- Vérifiez le volume de votre système
+## Historique
 
-### L'application est lente
-- Réduisez la taille du spray
-- Utilisez une image de fond plus petite
-- Fermez les autres applications
+L'application conserve jusqu'à 50 états pour la fonction Annuler.
 
-### L'image de fond ne s'affiche pas correctement
-- Utilisez des images en résolution standard (1920x1080 ou moins)
-- Formats recommandés : PNG ou JPEG
+## Notes
 
-## 📝 Notes techniques
+- Le curseur affiche un cercle de prévisualisation avec la taille actuelle du spray
+- La gomme restaure l'image de fond et le modèle (pas seulement du blanc)
+- Le son se déclenche uniquement en mode peinture (pas avec la gomme)
 
-- L'effet spray utilise un algorithme de dispersion aléatoire
-- L'opacité diminue vers les bords pour un effet naturel
-- Le son joue en boucle pendant le dessin
-- Les images sont sauvegardées en pleine résolution
+## Développement
 
-## 🎨 Astuces créatives
+Créé avec :
+- PyQt5 pour l'interface graphique
+- Pillow (PIL) pour le traitement d'image
+- Pygame pour l'audio
+- NumPy pour les conversions d'image
 
-- Commencez avec une grande taille pour les fonds
-- Utilisez une petite taille pour les détails
-- **Jouez avec l'opacité** : Réglez à 30-50% pour créer des effets de superposition et dégradés
-- **Superposez les couleurs** : Peignez une couleur, puis une autre avec faible opacité par-dessus
-- Chargez une photo de mur pour plus de réalisme
-- La cible vous montre exactement ce qui va être dessiné
+---
 
-## 📄 Licence
-
-Application créée pour usage personnel avec projecteur Epson EB-475Wi.
-
-## 👨‍💻 Support
-
-Pour tout problème lié aux pilotes Epson, consultez le support officiel Epson.
-
-Bon graffiti ! 🎨🚀
+**Version finale** - Prêt pour utilisation avec projecteur Epson

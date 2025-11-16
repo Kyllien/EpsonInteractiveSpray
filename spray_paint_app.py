@@ -3,11 +3,13 @@ import os
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                              QHBoxLayout, QPushButton, QLabel, QFileDialog,
                              QMessageBox, QCheckBox, QDialog, QGridLayout)
-from PyQt5.QtCore import Qt, QPoint, QTimer
-from PyQt5.QtGui import QPainter, QColor, QPen, QImage
+from PyQt5.QtCore import Qt, QPoint, QTimer, QPropertyAnimation, QRect
+from PyQt5.QtGui import (QPainter, QColor, QPen, QImage, QPixmap, QPainterPath,
+                         QLinearGradient, QRadialGradient, QBrush, QCursor)
 from PIL import Image, ImageEnhance, ImageDraw
 import random
 import pygame
+import numpy as np
 
 
 class SaveDialog(QDialog):
@@ -124,6 +126,7 @@ class DrawingCanvas(QWidget):
         """Initialiser l'image de dessin"""
         try:
             self.image = QImage(1920, 1080, QImage.Format_ARGB32)
+            # Remplir avec du blanc
             self.image.fill(Qt.white)
             # Initialiser la couche de dessin du parent
             if self.parent:
@@ -148,35 +151,148 @@ class DrawingCanvas(QWidget):
         painter.drawImage(0, 0, self.image)
 
         # Dessiner le curseur personnalisé (cercle de prévisualisation)
+        # Seulement si on n'est pas en train de dessiner et pas dans une zone protégée
         if not self.drawing and self.cursor_pos and self.parent:
-            painter.setPen(QPen(QColor(self.parent.spray_color), 2))
-            painter.setBrush(Qt.NoBrush)
+            # Ne pas afficher le curseur dans les zones protégées
+            if not self.is_in_protected_zone(self.cursor_pos):
+                painter.setPen(QPen(QColor(self.parent.spray_color), 2))
+                painter.setBrush(Qt.NoBrush)
 
-            # Cercle
-            radius = self.parent.spray_size
-            painter.drawEllipse(self.cursor_pos, radius, radius)
+                # Cercle
+                radius = self.parent.spray_size
+                painter.drawEllipse(self.cursor_pos, radius, radius)
 
-            # Croix
-            painter.drawLine(self.cursor_pos.x() - 5, self.cursor_pos.y(),
-                             self.cursor_pos.x() + 5, self.cursor_pos.y())
-            painter.drawLine(self.cursor_pos.x(), self.cursor_pos.y() - 5,
-                             self.cursor_pos.x(), self.cursor_pos.y() + 5)
+                # Croix
+                painter.drawLine(self.cursor_pos.x() - 5, self.cursor_pos.y(),
+                                 self.cursor_pos.x() + 5, self.cursor_pos.y())
+                painter.drawLine(self.cursor_pos.x(), self.cursor_pos.y() - 5,
+                                 self.cursor_pos.x(), self.cursor_pos.y() + 5)
 
     def mousePressEvent(self, event):
         """Démarrer le dessin"""
         if event.button() == Qt.LeftButton:
-            self.drawing = True
-            self.last_point = event.pos()
-            self.parent.start_spray(event.pos())
+            # Vérifier si le clic n'est pas dans la zone des menus ou boutons
+            if not self.is_in_protected_zone(event.pos()):
+                self.drawing = True
+                self.last_point = event.pos()
+                self.parent.start_spray(event.pos())
 
     def mouseMoveEvent(self, event):
         """Continuer le dessin ou mettre à jour le curseur"""
         self.cursor_pos = event.pos()
 
         if self.drawing:
-            self.parent.spray_paint(event.pos())
+            # Pendant le dessin, vérifier seulement les menus DÉPLOYÉS (pas les boutons)
+            if self.is_in_deployed_menu(event.pos()):
+                # Si on entre dans un menu déployé, arrêter le dessin
+                self.drawing = False
+                self.parent.stop_spray()
+            else:
+                # Sinon, continuer à dessiner normalement
+                self.parent.spray_paint(event.pos())
 
         self.update()
+
+    def is_in_deployed_menu(self, pos):
+        """Vérifier si la position est dans un menu DÉPLOYÉ (pas les boutons)"""
+        if not self.parent:
+            return False
+
+        # Convertir la position du canvas vers les coordonnées de la fenêtre parent
+        parent_pos = self.mapTo(self.parent, pos)
+
+        # Menu du haut déployé
+        if hasattr(self.parent, 'top_bar_visible') and self.parent.top_bar_visible:
+            if hasattr(self.parent, 'top_bar_content'):
+                content_global_pos = self.parent.top_bar_content.mapTo(self.parent, QPoint(0, 0))
+                content_rect = QRect(
+                    content_global_pos.x(),
+                    content_global_pos.y(),
+                    self.parent.top_bar_content.width(),
+                    self.parent.top_bar_content.height()
+                )
+                if content_rect.contains(parent_pos):
+                    return True
+
+        # Menu de droite déployé
+        if hasattr(self.parent, 'right_bar_visible') and self.parent.right_bar_visible:
+            if hasattr(self.parent, 'right_bar_content'):
+                content_global_pos = self.parent.right_bar_content.mapTo(self.parent, QPoint(0, 0))
+                content_rect = QRect(
+                    content_global_pos.x(),
+                    content_global_pos.y(),
+                    self.parent.right_bar_content.width(),
+                    self.parent.right_bar_content.height()
+                )
+                if content_rect.contains(parent_pos):
+                    return True
+
+        return False
+
+    def is_in_protected_zone(self, pos):
+        """Vérifier si la position est dans une zone protégée (pour les clics initiaux)"""
+        if not self.parent:
+            return False
+
+        # Convertir la position du canvas vers les coordonnées de la fenêtre parent
+        parent_pos = self.mapTo(self.parent, pos)
+
+        # Protection du menu du haut
+        if hasattr(self.parent, 'top_bar_visible') and hasattr(self.parent, 'top_bar'):
+            if self.parent.top_bar_visible:
+                # Menu déployé : protéger tout le contenu visible
+                if hasattr(self.parent, 'top_bar_content'):
+                    content_global_pos = self.parent.top_bar_content.mapTo(self.parent, QPoint(0, 0))
+                    content_rect = QRect(
+                        content_global_pos.x(),
+                        content_global_pos.y(),
+                        self.parent.top_bar_content.width(),
+                        self.parent.top_bar_content.height()
+                    )
+                    if content_rect.contains(parent_pos):
+                        return True
+
+            # Toujours protéger le bouton toggle du haut
+            if hasattr(self.parent, 'top_toggle_btn'):
+                btn_global_pos = self.parent.top_toggle_btn.mapTo(self.parent, QPoint(0, 0))
+                btn_rect = QRect(
+                    btn_global_pos.x(),
+                    btn_global_pos.y(),
+                    self.parent.top_toggle_btn.width(),
+                    self.parent.top_toggle_btn.height()
+                )
+                if btn_rect.contains(parent_pos):
+                    return True
+
+        # Protection du menu de droite
+        if hasattr(self.parent, 'right_bar_visible') and hasattr(self.parent, 'right_bar'):
+            if self.parent.right_bar_visible:
+                # Menu déployé : protéger tout le contenu visible
+                if hasattr(self.parent, 'right_bar_content'):
+                    content_global_pos = self.parent.right_bar_content.mapTo(self.parent, QPoint(0, 0))
+                    content_rect = QRect(
+                        content_global_pos.x(),
+                        content_global_pos.y(),
+                        self.parent.right_bar_content.width(),
+                        self.parent.right_bar_content.height()
+                    )
+                    if content_rect.contains(parent_pos):
+                        return True
+
+            # Toujours protéger le bouton toggle de droite - POSITION EXACTE
+            if hasattr(self.parent, 'right_toggle_btn'):
+                # Obtenir la position réelle du bouton dans la fenêtre
+                btn_global_pos = self.parent.right_toggle_btn.mapTo(self.parent, QPoint(0, 0))
+                btn_rect = QRect(
+                    btn_global_pos.x(),
+                    btn_global_pos.y(),
+                    self.parent.right_toggle_btn.width(),
+                    self.parent.right_toggle_btn.height()
+                )
+                if btn_rect.contains(parent_pos):
+                    return True
+
+        return False
 
     def mouseReleaseEvent(self, event):
         """Arrêter le dessin"""
@@ -228,11 +344,18 @@ class SprayPaintApp(QMainWindow):
         self.eraser_mode = False
 
         # Historique
-        self.history = []
+        self.history = []  # Contiendra des tuples (canvas_image, drawing_layer)
         self.max_history = 50
 
         # Détection position
         self.last_valid_position = None
+        self.position_not_detected_count = 0  # Compteur pour détecter les problèmes de stylet
+
+        # État des barres rétractables
+        self.top_bar_visible = True
+        self.right_bar_visible = True
+        self.top_bar_animation = None
+        self.right_bar_animation = None
 
         # Palette de couleurs
         self.color_palette = [
@@ -273,6 +396,9 @@ class SprayPaintApp(QMainWindow):
         self.canvas.setGeometry(0, 0, self.width(), self.height())
         self.canvas.show()
         print("Canvas créé")
+
+        # Initialiser l'historique avec l'état de départ
+        self.save_state()
 
         # Barre supérieure (overlay en haut à droite)
         print("Création de la barre supérieure...")
@@ -334,10 +460,33 @@ class SprayPaintApp(QMainWindow):
 
         layout = QVBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(5)
 
-        # Widget avec fond métallique
-        bar = QWidget()
-        bar.setStyleSheet("""
+        # Bouton de réduction/expansion en haut
+        self.top_toggle_btn = QPushButton("▼")
+        self.top_toggle_btn.setStyleSheet("""
+            QPushButton {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #e0e0e0, stop:0.5 #c0c0c0, stop:1 #a0a0a0);
+                border: 2px solid #808080;
+                border-radius: 5px;
+                font-size: 16px;
+                font-weight: bold;
+                min-height: 25px;
+                max-height: 25px;
+                color: black;
+            }
+            QPushButton:hover {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #f0f0f0, stop:0.5 #d0d0d0, stop:1 #b0b0b0);
+            }
+        """)
+        self.top_toggle_btn.clicked.connect(self.toggle_top_bar)
+        layout.addWidget(self.top_toggle_btn)
+
+        # Widget avec fond métallique (la barre des outils)
+        self.top_bar_content = QWidget()
+        self.top_bar_content.setStyleSheet("""
             QWidget {
                 background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
                     stop:0 #e0e0e0, stop:0.5 #c0c0c0, stop:1 #a0a0a0);
@@ -410,13 +559,12 @@ class SprayPaintApp(QMainWindow):
 
         buttons_frame.setLayout(buttons_layout)
         bar_layout.addWidget(buttons_frame)
-        bar.setLayout(bar_layout)
+        self.top_bar_content.setLayout(bar_layout)
 
         # Forcer une largeur minimum pour que tous les boutons s'affichent
-        # 4 boutons * 40px + 3 espacements * 10px + marges 2*12px = 214px
-        bar.setMinimumWidth(220)
+        self.top_bar_content.setMinimumWidth(220)
 
-        layout.addWidget(bar)
+        layout.addWidget(self.top_bar_content)
         container.setLayout(layout)
 
         return container
@@ -427,12 +575,13 @@ class SprayPaintApp(QMainWindow):
         container = QWidget()
         container.setStyleSheet("background: transparent;")
 
-        layout = QVBoxLayout()
+        layout = QHBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(5)
 
-        # Widget avec fond métallique (les contrôles)
-        bar = QWidget()
-        bar.setStyleSheet("""
+        # Widget avec fond métallique (les contrôles) - AJOUTÉ EN PREMIER
+        self.right_bar_content = QWidget()
+        self.right_bar_content.setStyleSheet("""
             QWidget {
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
                     stop:0 #e0e0e0, stop:0.5 #c0c0c0, stop:1 #a0a0a0);
@@ -624,15 +773,86 @@ class SprayPaintApp(QMainWindow):
         colors_widget.setLayout(colors_layout)
         controls_layout.addWidget(colors_widget)
 
-        bar.setLayout(controls_layout)
+        self.right_bar_content.setLayout(controls_layout)
 
         # Forcer la même largeur que la barre du haut
-        bar.setMinimumWidth(220)
+        self.right_bar_content.setMinimumWidth(220)
 
-        layout.addWidget(bar)
+        # Ajouter le contenu d'abord
+        layout.addWidget(self.right_bar_content)
+
+        # Puis le bouton de réduction/expansion à droite
+        self.right_toggle_btn = QPushButton("▶")
+        self.right_toggle_btn.setStyleSheet("""
+            QPushButton {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #e0e0e0, stop:0.5 #c0c0c0, stop:1 #a0a0a0);
+                border: 2px solid #808080;
+                border-radius: 5px;
+                font-size: 16px;
+                font-weight: bold;
+                min-width: 25px;
+                max-width: 25px;
+                color: black;
+            }
+            QPushButton:hover {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #f0f0f0, stop:0.5 #d0d0d0, stop:1 #b0b0b0);
+            }
+        """)
+        self.right_toggle_btn.clicked.connect(self.toggle_right_bar)
+        layout.addWidget(self.right_toggle_btn)
+
         container.setLayout(layout)
 
         return container
+
+    def toggle_top_bar(self):
+        """Afficher/masquer la barre du haut avec animation"""
+        if self.top_bar_visible:
+            # Masquer
+            target_height = 0
+            self.top_toggle_btn.setText("▼")
+            # Permettre de réduire à 0
+            self.top_bar_content.setMinimumHeight(0)
+        else:
+            # Afficher
+            target_height = 80  # Hauteur approximative du contenu
+            self.top_toggle_btn.setText("▲")
+            # Restaurer la hauteur minimum
+            self.top_bar_content.setMinimumHeight(0)
+
+        # Créer l'animation
+        self.top_bar_animation = QPropertyAnimation(self.top_bar_content, b"maximumHeight")
+        self.top_bar_animation.setDuration(300)  # 300ms
+        self.top_bar_animation.setStartValue(self.top_bar_content.height())
+        self.top_bar_animation.setEndValue(target_height)
+        self.top_bar_animation.start()
+
+        self.top_bar_visible = not self.top_bar_visible
+
+    def toggle_right_bar(self):
+        """Afficher/masquer la barre de droite avec animation"""
+        if self.right_bar_visible:
+            # Masquer le contenu (se rétracte vers la gauche)
+            target_width = 0
+            self.right_toggle_btn.setText("◀")  # Flèche vers la gauche quand masqué
+            self.right_bar_content.setMinimumWidth(0)
+        else:
+            # Afficher le contenu (se déploie vers la gauche)
+            target_width = 220
+            self.right_toggle_btn.setText("▶")  # Flèche vers la droite quand visible
+            self.right_bar_content.setMinimumWidth(220)
+
+        # Animation uniquement de la largeur du contenu
+        # Le bouton reste fixe à sa position, le contenu glisse vers la gauche
+        self.right_bar_animation = QPropertyAnimation(self.right_bar_content, b"maximumWidth")
+        self.right_bar_animation.setDuration(300)
+        self.right_bar_animation.setStartValue(self.right_bar_content.width())
+        self.right_bar_animation.setEndValue(target_width)
+        self.right_bar_animation.start()
+
+        self.right_bar_visible = not self.right_bar_visible
 
     def show_message(self, title, message, icon=QMessageBox.Information):
         """Afficher un message avec le bon style"""
@@ -781,6 +1001,15 @@ class SprayPaintApp(QMainWindow):
                 print("RAPPEL: Appuyez sur ESC pour quitter l'application")
 
             print("Configuration de l'écran terminée")
+            print("\n" + "=" * 60)
+            print("ℹ️  INFORMATION IMPORTANTE - Epson Pen Interactive")
+            print("=" * 60)
+            print("Si le stylet n'est pas détecté correctement par l'écran :")
+            print("• Le son du spray se jouera")
+            print("• Mais AUCUN dessin n'apparaîtra")
+            print("\nCela indique que le stylet est détecté mais pas sa position.")
+            print("Solution : Vérifiez la connexion du stylet à l'écran interactif.")
+            print("=" * 60 + "\n")
         except Exception as e:
             print(f"ERREUR dans setup_screen: {e}")
             import traceback
@@ -817,7 +1046,9 @@ class SprayPaintApp(QMainWindow):
                 img = Image.open(file_path).convert('RGBA')
                 img = img.resize((1920, 1080), Image.Resampling.LANCZOS)
                 self.background_image = img
+
                 self.reload_background_layers()
+                self.save_state()  # Sauvegarder après le chargement
                 # Pas de message de succès pour éviter le bruit Windows
             except Exception as e:
                 self.show_message("Erreur", f"Impossible de charger l'image:\n{e}", QMessageBox.Critical)
@@ -850,29 +1081,62 @@ class SprayPaintApp(QMainWindow):
                 img = Image.open(file_path).convert('RGBA')
                 img = img.resize((1000, 1000), Image.Resampling.LANCZOS)
 
-                # Appliquer 30% d'opacité
+                # Extraire automatiquement le contenu en supprimant le fond
+                img_array = np.array(img)
+
+                # Détecter le fond (couleur dominante dans les coins)
+                corners = [
+                    img_array[0:10, 0:10],  # Haut gauche
+                    img_array[0:10, -10:],  # Haut droit
+                    img_array[-10:, 0:10],  # Bas gauche
+                    img_array[-10:, -10:]  # Bas droit
+                ]
+
+                # Calculer la couleur moyenne des coins (c'est généralement le fond)
+                corner_pixels = np.concatenate([c.reshape(-1, 4) for c in corners])
+                bg_color = np.median(corner_pixels, axis=0).astype(int)
+
+                # Créer un masque pour isoler le contenu
+                # Pixels similaires au fond deviennent transparents
+                diff = np.abs(img_array.astype(int) - bg_color)
+                # Seuil de différence (ajustable)
+                threshold = 50
+                is_background = np.all(diff[:, :, :3] < threshold, axis=2)
+
+                # Appliquer le masque
+                img_array[:, :, 3] = np.where(is_background, 0, img_array[:, :, 3])
+
+                # Recréer l'image
+                img = Image.fromarray(img_array, 'RGBA')
+
+                # Appliquer 60% d'opacité au contenu restant (au lieu de 30%)
                 alpha = img.split()[3]
-                alpha = ImageEnhance.Brightness(alpha).enhance(0.3)
+                alpha = ImageEnhance.Brightness(alpha).enhance(0.6)
                 img.putalpha(alpha)
 
                 self.template_image = img
                 self.reload_background_layers()
+                self.save_state()  # Sauvegarder après le chargement
                 # Pas de message de succès pour éviter le bruit Windows
             except Exception as e:
                 self.show_message("Erreur", f"Impossible de charger l'image modèle:\n{e}", QMessageBox.Critical)
 
     def reload_background_layers(self):
         """Recharger toutes les couches en préservant le dessin"""
-        # Créer la couche de fond (blanc + fond + modèle)
+        # Toujours créer un fond blanc
         base = Image.new('RGBA', (1920, 1080), (255, 255, 255, 255))
 
         if self.background_image:
             base = Image.alpha_composite(base, self.background_image)
 
+        # Le modèle est collé avec alpha compositing pour gérer la transparence
         if self.template_image:
             x = self.template_position[0] - 500
             y = self.template_position[1] - 500
-            base.paste(self.template_image, (x, y), self.template_image)
+            # Créer une image temporaire pour placer le modèle
+            temp_layer = Image.new('RGBA', (1920, 1080), (0, 0, 0, 0))
+            temp_layer.paste(self.template_image, (x, y), self.template_image)
+            base = Image.alpha_composite(base, temp_layer)
 
         # Ajouter le dessin par-dessus si il existe
         if self.drawing_layer is not None:
@@ -883,7 +1147,7 @@ class SprayPaintApp(QMainWindow):
         qimage = QImage(img_data, 1920, 1080, QImage.Format_RGBA8888)
         self.canvas.image = qimage.copy()
 
-        self.save_state()
+        # NE PAS sauvegarder l'état ici - cela cause des problèmes avec l'historique
         self.canvas.update()
 
     def load_sound(self):
@@ -935,7 +1199,11 @@ class SprayPaintApp(QMainWindow):
             include_tpl = dialog.include_template.isChecked()
 
             # Composer l'image finale selon les options
-            final_image = Image.new('RGBA', (1920, 1080), (255, 255, 255, 255))
+            # Si on n'inclut pas le fond, créer un fond transparent pour avoir juste le dessin
+            if not include_bg:
+                final_image = Image.new('RGBA', (1920, 1080), (0, 0, 0, 0))
+            else:
+                final_image = Image.new('RGBA', (1920, 1080), (255, 255, 255, 255))
 
             # Ajouter le fond si demandé
             if include_bg and self.background_image:
@@ -945,14 +1213,21 @@ class SprayPaintApp(QMainWindow):
             if include_tpl and self.template_image:
                 tx = self.template_position[0] - 500
                 ty = self.template_position[1] - 500
-                final_image.paste(self.template_image, (tx, ty), self.template_image)
+                # Créer une image temporaire pour placer le modèle
+                temp_layer = Image.new('RGBA', (1920, 1080), (0, 0, 0, 0))
+                temp_layer.paste(self.template_image, (tx, ty), self.template_image)
+                final_image = Image.alpha_composite(final_image, temp_layer)
 
             # Toujours ajouter le dessin (qui est déjà isolé dans drawing_layer)
             if self.drawing_layer:
                 final_image = Image.alpha_composite(final_image, self.drawing_layer)
 
-            # Convertir en RGB pour la sauvegarde
-            final_image = final_image.convert('RGB')
+            # Convertir en RGB pour la sauvegarde (sauf si fond transparent)
+            if not include_bg:
+                # Garder le PNG avec transparence
+                pass
+            else:
+                final_image = final_image.convert('RGB')
 
             # Désactiver les sons Windows
             try:
@@ -961,9 +1236,15 @@ class SprayPaintApp(QMainWindow):
             except:
                 pass
 
+            # Adapter les formats disponibles selon si on a de la transparence
+            if not include_bg:
+                file_formats = "PNG (*.png)"
+            else:
+                file_formats = "PNG (*.png);;JPEG (*.jpg)"
+
             file_path, _ = QFileDialog.getSaveFileName(
                 self, "Sauvegarder l'image",
-                save_dir, "PNG (*.png);;JPEG (*.jpg)"
+                save_dir, file_formats
             )
 
             # Réactiver les sons Windows
@@ -1016,8 +1297,13 @@ class SprayPaintApp(QMainWindow):
     def undo(self):
         """Annuler"""
         if len(self.history) > 1:
+            # Retirer l'état actuel
             self.history.pop()
-            self.canvas.image = self.history[-1].copy()
+            # Récupérer l'état précédent
+            canvas_image, drawing_layer = self.history[-1]
+            self.canvas.image = canvas_image.copy()
+            if drawing_layer:
+                self.drawing_layer = drawing_layer.copy()
             self.canvas.update()
 
     def restart_with_background(self):
@@ -1027,6 +1313,7 @@ class SprayPaintApp(QMainWindow):
             # Réinitialiser uniquement la couche de dessin
             self.drawing_layer = Image.new('RGBA', (1920, 1080), (0, 0, 0, 0))
             self.reload_background_layers()
+            self.save_state()  # Sauvegarder après le restart
 
     def decrease_size(self):
         """Diminuer la taille"""
@@ -1059,10 +1346,12 @@ class SprayPaintApp(QMainWindow):
         self.spray_color = color
 
     def save_state(self):
-        """Sauvegarder l'état"""
+        """Sauvegarder l'état (canvas + couche de dessin)"""
         if len(self.history) >= self.max_history:
             self.history.pop(0)
-        self.history.append(self.canvas.image.copy())
+        # Sauvegarder à la fois l'image canvas et la couche de dessin
+        drawing_copy = self.drawing_layer.copy() if self.drawing_layer else None
+        self.history.append((self.canvas.image.copy(), drawing_copy))
 
     def start_spray(self, pos):
         """Démarrer le spray"""
@@ -1083,13 +1372,26 @@ class SprayPaintApp(QMainWindow):
             dy = abs(pos.y() - self.last_valid_position.y())
 
             if dx < 2 and dy < 2:
-                # Position non détectée, son seulement
+                # Position non détectée, son seulement (problème de stylet Epson)
+                self.position_not_detected_count += 1
+
+                # Afficher un avertissement après 10 tentatives
+                if self.position_not_detected_count == 10:
+                    print("\n⚠️  ATTENTION: Le stylet Epson est détecté mais sa position ne l'est pas!")
+                    print("   Le son se joue mais aucun dessin n'apparaît.")
+                    print("   Vérifiez la connexion du stylet à l'écran interactif.\n")
+
                 if self.pygame_available and self.spray_sound and not self.eraser_mode and not self.sound_channel:
                     try:
                         self.sound_channel = self.spray_sound.play(loops=-1)
                     except Exception as e:
                         print(f"Erreur lors de la lecture du son: {e}")
                 return
+            else:
+                # Position détectée correctement, réinitialiser le compteur
+                if self.position_not_detected_count > 0:
+                    print("✓ Position du stylet détectée correctement!")
+                    self.position_not_detected_count = 0
 
         self.last_valid_position = pos
 
@@ -1192,10 +1494,14 @@ class SprayPaintApp(QMainWindow):
         if self.background_image:
             final_image = Image.alpha_composite(final_image, self.background_image)
 
+        # Le modèle est collé avec alpha compositing pour gérer la transparence
         if self.template_image:
             tx = self.template_position[0] - 500
             ty = self.template_position[1] - 500
-            final_image.paste(self.template_image, (tx, ty), self.template_image)
+            # Créer une image temporaire pour placer le modèle
+            temp_layer = Image.new('RGBA', (1920, 1080), (0, 0, 0, 0))
+            temp_layer.paste(self.template_image, (tx, ty), self.template_image)
+            final_image = Image.alpha_composite(final_image, temp_layer)
 
         # Ajouter le dessin par-dessus
         final_image = Image.alpha_composite(final_image, self.drawing_layer)
